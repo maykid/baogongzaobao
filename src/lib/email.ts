@@ -102,7 +102,7 @@ export async function sendDigestEmail(
 
   try {
     // 创建邮件传输器
-    const transporter = nodemailer.createTransporter({
+    const transporter = nodemailer.createTransport({
       host: smtpHost,
       port: smtpPort,
       secure: smtpPort === 465, // 465 用 SSL，587 用 TLS
