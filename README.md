@@ -64,7 +64,7 @@ baogongzaobao/
 | `SMTP_PORT` | `587`（QQ/163 通用） |
 | `SMTP_USER` | 你的邮箱地址，如 `123456@qq.com` |
 | `SMTP_PASS` | SMTP 授权码（不是邮箱密码！） |
-| `MOFCOM_URL` | 商务部栏目页 URL |
+| `MOFCOM_URL` | `https://www.mofcom.gov.cn/zwgk/zcfb/index.html` | 商务部政策发布栏目 |
 
 ### 第四步：部署到 Vercel
 
