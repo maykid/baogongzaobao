@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>保供早报 - 每天自动推送进出口政策</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+  </style>
+</head>
+<body class="bg-gradient-to-b from-blue-50 to-white min-h-screen">
+  <!-- 导航栏 -->
+  <nav class="bg-blue-900 text-white">
+    <div class="max-w-5xl mx-auto px-4 py-4">
+      <h1 class="text-xl font-bold">保供早报</h1>
+    </div>
+  </nav>
+
+  <!-- 主内容 -->
+  <div class="max-w-2xl mx-auto px-4 py-12">
+    <!-- 介绍 -->
+    <div class="text-center mb-10">
+      <h2 class="text-3xl font-bold text-gray-900 mb-4">每天一封邮件<br><span class="text-blue-600">进出口政策不错过</span></h2>
+      <p class="text-gray-600">自动抓取商务部最新进出口管理规定，由 Kimi AI 智能分类，每天早上 9 点准时推送到您的邮箱。</p>
+    </div>
+
+    <!-- 订阅表单 -->
+    <div class="bg-white rounded-2xl shadow-lg p-8">
+      <h3 class="text-xl font-bold text-gray-900 mb-6 text-center">订阅保供早报</h3>
+      
+      <form id="subscribeForm" class="space-y-5">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">邮箱地址</label>
+          <input type="email" id="email" required placeholder="your-email@company.com" 
+            class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-3">关注的政策分类</label>
+          <div class="space-y-2" id="categories">
+            <label class="flex items-center p-3 border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-50">
+              <input type="checkbox" value="auto_parts" checked class="w-5 h-5 text-blue-600 rounded">
+              <span class="ml-3">汽车零部件进口</span>
+            </label>
+            <label class="flex items-center p-3 border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-50">
+              <input type="checkbox" value="raw_materials" checked class="w-5 h-5 text-blue-600 rounded">
+              <span class="ml-3">原材料出口</span>
+            </label>
+            <label class="flex items-center p-3 border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-50">
+              <input type="checkbox" value="tariff" checked class="w-5 h-5 text-blue-600 rounded">
+              <span class="ml-3">关税调整</span>
+            </label>
+            <label class="flex items-center p-3 border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-50">
+              <input type="checkbox" value="license" checked class="w-5 h-5 text-blue-600 rounded">
+              <span class="ml-3">许可证管理</span>
+            </label>
+            <label class="flex items-center p-3 border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-50">
+              <input type="checkbox" value="trade_control" checked class="w-5 h-5 text-blue-600 rounded">
+              <span class="ml-3">贸易管制/禁限</span>
+            </label>
+          </div>
+        </div>
+
+        <button type="submit" id="submitBtn"
+          class="w-full bg-blue-600 text-white py-4 rounded-xl font-semibold text-lg hover:bg-blue-700 transition">
+          立即订阅
+        </button>
+      </form>
+
+      <div id="message" class="mt-4 text-center hidden"></div>
+
+      <p class="mt-6 text-sm text-gray-500 text-center">
+        订阅即表示同意接收保供早报每日邮件推送。<br>
+        重要决策请以商务部官网为准。
+      </p>
+    </div>
+
+    <!-- 工作原理 -->
+    <div class="mt-12 bg-white rounded-2xl shadow-sm p-8">
+      <h3 class="text-lg font-bold text-gray-900 mb-6 text-center">工作原理</h3>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+        <div class="p-4">
+          <div class="w-10 h-10 bg-blue-600 text-white rounded-full flex items-center justify-center mx-auto mb-2 font-bold">1</div>
+          <p class="text-sm text-gray-600">定时触发</p>
+        </div>
+        <div class="p-4">
+          <div class="w-10 h-10 bg-blue-600 text-white rounded-full flex items-center justify-center mx-auto mb-2 font-bold">2</div>
+          <p class="text-sm text-gray-600">网页抓取</p>
+        </div>
+        <div class="p-4">
+          <div class="w-10 h-10 bg-blue-600 text-white rounded-full flex items-center justify-center mx-auto mb-2 font-bold">3</div>
+          <p class="text-sm text-gray-600">AI 分类</p>
+        </div>
+        <div class="p-4">
+          <div class="w-10 h-10 bg-blue-600 text-white rounded-full flex items-center justify-center mx-auto mb-2 font-bold">4</div>
+          <p class="text-sm text-gray-600">邮件推送</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 页脚 -->
+  <footer class="bg-gray-900 text-gray-400 py-8 mt-12">
+    <div class="max-w-5xl mx-auto px-4 text-center">
+      <p>保供早报 · 由 Kimi 智能分类生成 · 重要决策请以商务部官网为准</p>
+    </div>
+  </footer>
+
+  <script>
+    // ======================== 配置区域 ========================
+    // 请替换为你自己的 Supabase 配置（从 Supabase Dashboard → API 页面获取）
+    const SUPABASE_URL = 'https://gpgxbrfbeqajxfafhlci.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdwZ3hicmZiZXFhanhmYWZobGNpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgzMzI1NDksImV4cCI6MjA5MzkwODU0OX0.YfLefOlDc1vg0oLfBZ3fQi7FkeoFnfn3n6w9dFpdkCI';
+    // =========================================================
+
+    document.getElementById('subscribeForm').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      
+      const email = document.getElementById('email').value.trim();
+      const checkboxes = document.querySelectorAll('#categories input[type="checkbox"]:checked');
+      const categories = Array.from(checkboxes).map(cb => cb.value);
+      const btn = document.getElementById('submitBtn');
+      const msg = document.getElementById('message');
+
+      // 检查 Supabase 配置是否已修改
+      if (SUPABASE_URL.includes('你的项目ID') || SUPABASE_ANON_KEY.includes('你的')) {
+        msg.className = 'mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-xl text-yellow-800 text-center';
+        msg.innerHTML = '⚠️ 请先修改代码中的 Supabase 配置（SUPABASE_URL 和 SUPABASE_ANON_KEY）';
+        msg.classList.remove('hidden');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = '提交中...';
+      msg.classList.add('hidden');
+
+      try {
+        const response = await fetch(`${SUPABASE_URL}/rest/v1/subscribers`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+            'Prefer': 'resolution=merge-duplicates'
+          },
+          body: JSON.stringify({
+            email: email,
+            categories: categories,
+            active: true
+          })
+        });
+
+        if (response.ok) {
+          msg.className = 'mt-4 p-4 bg-green-50 border border-green-200 rounded-xl text-green-800 text-center';
+          msg.innerHTML = '✅ 订阅成功！明天早上 9 点您将收到第一封保供早报。';
+          document.getElementById('email').value = '';
+        } else {
+          const error = await response.text();
+          msg.className = 'mt-4 p-4 bg-red-50 border border-red-200 rounded-xl text-red-800 text-center';
+          msg.innerHTML = '❌ 订阅失败：' + error;
+        }
+      } catch (err) {
+        msg.className = 'mt-4 p-4 bg-red-50 border border-red-200 rounded-xl text-red-800 text-center';
+        msg.innerHTML = '❌ 网络错误，请检查连接';
+      }
+
+      msg.classList.remove('hidden');
+      btn.disabled = false;
+      btn.textContent = '立即订阅';
+    });
+  </script>
+</body>
+</html>
