@@ -31,17 +31,13 @@ async function fetchHtml(url: string): Promise<string> {
     throw new Error(`HTTP ${response.status}: ${response.statusText}`)
   }
 
-  // 获取原始二进制数据
   const buffer = Buffer.from(await response.arrayBuffer())
-
-  // 尝试从 Content-Type 或 HTML meta 标签检测编码
   const contentType = response.headers.get('content-type') || ''
   let encoding = 'utf-8'
 
   if (contentType.includes('gbk') || contentType.includes('gb2312')) {
     encoding = 'gbk'
   } else {
-    // 从 HTML 前 1024 字节检测 meta charset
     const headerStr = buffer.slice(0, 1024).toString('binary')
     if (/charset\s*=\s*["']?gbk/i.test(headerStr) ||
         /charset\s*=\s*["']?gb2312/i.test(headerStr)) {
@@ -49,10 +45,8 @@ async function fetchHtml(url: string): Promise<string> {
     }
   }
 
-  // 使用 iconv-lite 解码
   const html = iconv.decode(buffer, encoding)
   console.log(`[Scraper] 获取页面成功，编码: ${encoding}, 长度: ${html.length}`)
-
   return html
 }
 
@@ -64,7 +58,7 @@ async function getSentUrls(): Promise<Set<string>> {
     const { data, error } = await supabaseAdmin
       .from('scrape_history')
       .select('policy_url')
-      .gte('scraped_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()) // 最近7天
+      .gte('scraped_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
 
     if (error) {
       console.error('[Scraper] 获取历史记录失败:', error)
@@ -78,7 +72,7 @@ async function getSentUrls(): Promise<Set<string>> {
 }
 
 /**
- * 记录已发送的政策 URL
+ * 记录已发送的政策
  */
 async function recordSentUrls(policies: PolicyItem[]): Promise<void> {
   try {
@@ -98,7 +92,7 @@ async function recordSentUrls(policies: PolicyItem[]): Promise<void> {
 }
 
 /**
- * 清理 HTML 标签
+ * 清理 HTML 标签和多余空白
  */
 function cleanText(text: string): string {
   return text
@@ -116,10 +110,9 @@ function cleanText(text: string): string {
  * 判断标题是否像政策公告
  */
 function isPolicyTitle(title: string): boolean {
-  if (title.length < 5 || title.length > 100) return false
-
+  if (title.length < 10 || title.length > 200) return false
   const keywords = ['通知', '公告', '规定', '办法', '细则', '决定', '批复',
-    '函', '通报', '意见', '通告', '令', '目录', '清单', '调整']
+    '函', '通报', '意见', '通告', '令', '目录', '清单', '调整', '措施']
   return keywords.some(k => title.includes(k))
 }
 
@@ -130,7 +123,6 @@ function resolveUrl(url: string, baseUrl: string): string {
   if (url.startsWith('http://') || url.startsWith('https://')) {
     return url
   }
-
   try {
     const base = new URL(baseUrl)
     if (url.startsWith('/')) {
@@ -144,15 +136,32 @@ function resolveUrl(url: string, baseUrl: string): string {
 }
 
 /**
- * 从 HTML 中提取日期
+ * 从标题末尾提取日期 [YYYY-MM-DD]
  */
-function extractDate(text: string): string {
-  // 匹配 2026-05-09 或 2026/05/09 或 2026年05月09日
-  const match = text.match(/(\d{4})[-\/年](\d{1,2})[-\/月](\d{1,2})/)
-  if (match) {
-    return `${match[1]}-${match[2].padStart(2, '0')}-${match[3].padStart(2, '0')}`
+function extractDateFromTitle(title: string): { cleanTitle: string; date: string } {
+  const dateMatch = title.match(/\[(\d{4}-\d{2}-\d{2})\]\s*$/)
+  if (dateMatch) {
+    return {
+      cleanTitle: title.replace(/\s*\[\d{4}-\d{2}-\d{2}\]\s*$/, '').trim(),
+      date: dateMatch[1],
+    }
   }
-  return new Date().toISOString().split('T')[0]
+  // 尝试匹配其他格式：(2026-05-02) 或 2026-05-02
+  const altMatch = title.match(/[\(（](\d{4}-\d{2}-\d{2})[\)）]\s*$/)
+  if (altMatch) {
+    return {
+      cleanTitle: title.replace(/\s*[\(（]\d{4}-\d{2}-\d{2}[\)）]\s*$/, '').trim(),
+      date: altMatch[1],
+    }
+  }
+  return { cleanTitle: title, date: new Date().toISOString().split('T')[0] }
+}
+
+/**
+ * 生成唯一标识（用于去重，基于标题）
+ */
+function generateId(title: string): string {
+  return title.replace(/\s+/g, '').slice(0, 50)
 }
 
 /**
@@ -166,67 +175,64 @@ export async function scrapeMoFomPolicies(): Promise<PolicyItem[]> {
     const sentUrls = await getSentUrls()
     const policies: PolicyItem[] = []
 
-    // 策略1: 匹配 <li> 列表（最常见的政务网站结构）
-    // 支持：<li>...<a href="...">标题</a>...<span>日期</span>...</li>
-    const liPatterns = [
-      /<li[^>]*>[\s\S]*?<a[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>[\s\S]*?<span[^>]*>([^<]+)<\/span>[\s\S]*?<\/li>/gi,
-      /<li[^>]*>[\s\S]*?<a[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>[\s\S]*?(\d{4}[-\/年]\d{1,2}[-\/月]\d{1,2})[\s\S]*?<\/li>/gi,
-    ]
+    // 策略1: 匹配 <li> 里的 <a> 链接（标准列表结构）
+    const liLinkPattern = /<li[^>]*>[\s\S]*?<a[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>[\s\S]*?<\/li>/gi
+    let match
+    while ((match = liLinkPattern.exec(html)) !== null && policies.length < 20) {
+      const url = cleanText(match[1])
+      const rawText = cleanText(match[2])
+      const { cleanTitle, date } = extractDateFromTitle(rawText)
+      const fullUrl = resolveUrl(url, targetUrl)
 
-    for (const pattern of liPatterns) {
-      let match
-      while ((match = pattern.exec(html)) !== null && policies.length < 20) {
-        const url = cleanText(match[1])
-        const title = cleanText(match[2])
-        const dateText = cleanText(match[3] || '')
-        const fullUrl = resolveUrl(url, targetUrl)
+      if (cleanTitle && isPolicyTitle(cleanTitle) && !sentUrls.has(generateId(cleanTitle))) {
+        policies.push({ title: cleanTitle, url: fullUrl, date })
+      }
+    }
 
-        if (title && isPolicyTitle(title) && !sentUrls.has(fullUrl)) {
-          policies.push({
-            title,
-            url: fullUrl,
-            date: extractDate(dateText),
-          })
+    // 策略2: 匹配包含 [YYYY-MM-DD] 日期的文本行（商务部常见格式）
+    if (policies.length === 0) {
+      console.log('[Scraper] 策略1未匹配，尝试按日期格式匹配文本行')
+
+      // 匹配模式：任意文本 + [YYYY-MM-DD]
+      const dateLinePattern = />([^<]{20,300}?)\[(\d{4}-\d{2}-\d{2})\]</g
+      while ((match = dateLinePattern.exec(html)) !== null && policies.length < 20) {
+        const rawText = cleanText(match[1])
+        const date = match[2]
+        const { cleanTitle } = extractDateFromTitle(rawText + `[${date}]`)
+
+        if (cleanTitle && isPolicyTitle(cleanTitle) && !sentUrls.has(generateId(cleanTitle))) {
+          // 如果没有链接，使用列表页URL作为占位
+          policies.push({ title: cleanTitle, url: targetUrl, date })
         }
       }
     }
 
-    // 策略2: 匹配 <tr> 表格行
+    // 策略3: 匹配 <p> 或 <div> 中包含日期的段落
     if (policies.length === 0) {
-      const trPattern = /<tr[^>]*>[\s\S]*?<a[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>[\s\S]*?<\/tr>/gi
-      let match
-      while ((match = trPattern.exec(html)) !== null && policies.length < 20) {
-        const url = cleanText(match[1])
-        const title = cleanText(match[2])
-        const dateText = cleanText(match[3])
-        const fullUrl = resolveUrl(url, targetUrl)
+      console.log('[Scraper] 策略2未匹配，尝试段落匹配')
+      const paragraphPattern = /<(?:p|div)[^>]*>([^<]{30,300}?)\[(\d{4}-\d{2}-\d{2})\]<\/\w+>/gi
+      while ((match = paragraphPattern.exec(html)) !== null && policies.length < 20) {
+        const rawText = cleanText(match[1])
+        const date = match[2]
+        const { cleanTitle } = extractDateFromTitle(rawText + `[${date}]`)
 
-        if (title && isPolicyTitle(title) && !sentUrls.has(fullUrl)) {
-          policies.push({
-            title,
-            url: fullUrl,
-            date: extractDate(dateText),
-          })
+        if (cleanTitle && isPolicyTitle(cleanTitle) && !sentUrls.has(generateId(cleanTitle))) {
+          policies.push({ title: cleanTitle, url: targetUrl, date })
         }
       }
     }
 
-    // 策略3: 通用 <a> 标签兜底
+    // 策略4: 兜底 - 匹配任何包含日期的行
     if (policies.length === 0) {
-      console.log('[Scraper] 前两种策略未匹配，尝试兜底策略')
-      const linkPattern = /<a[^>]*href=["']([^"']+)["'][^>]*>([^<]{10,100})<\/a>/gi
-      let match
-      while ((match = linkPattern.exec(html)) !== null && policies.length < 15) {
-        const url = cleanText(match[1])
-        const title = cleanText(match[2])
-        const fullUrl = resolveUrl(url, targetUrl)
+      console.log('[Scraper] 策略3未匹配，尝试兜底匹配')
+      const fallbackPattern = /([\u4e00-\u9fa5].{15,200}?)\[(\d{4}-\d{2}-\d{2})\]/g
+      while ((match = fallbackPattern.exec(html)) !== null && policies.length < 20) {
+        const rawText = cleanText(match[1])
+        const date = match[2]
+        const { cleanTitle } = extractDateFromTitle(rawText + `[${date}]`)
 
-        if (title && isPolicyTitle(title) && !sentUrls.has(fullUrl)) {
-          policies.push({
-            title,
-            url: fullUrl,
-            date: new Date().toISOString().split('T')[0],
-          })
+        if (cleanTitle && isPolicyTitle(cleanTitle) && !sentUrls.has(generateId(cleanTitle))) {
+          policies.push({ title: cleanTitle, url: targetUrl, date })
         }
       }
     }
@@ -240,9 +246,10 @@ export async function scrapeMoFomPolicies(): Promise<PolicyItem[]> {
     }).slice(0, 10)
 
     console.log(`[Scraper] 共抓取 ${uniquePolicies.length} 条新政策`)
-
-    // 记录本次抓取的 URL
     if (uniquePolicies.length > 0) {
+      uniquePolicies.forEach((p, i) => {
+        console.log(`[Scraper] ${i + 1}. ${p.title} [${p.date}]`)
+      })
       await recordSentUrls(uniquePolicies)
     }
 
