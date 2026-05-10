@@ -1,28 +1,35 @@
-# GitHub Actions 定时任务
-# 每天北京时间 9:00 自动调用 API 发送保供早报
-
 name: Daily Policy Digest
 
 on:
   schedule:
-    # UTC 时间 1:00 = 北京时间 9:00（夏令时可能差 1 小时，需要调整）
+    # UTC 01:00 = 北京时间 09:00
     - cron: '0 1 * * *'
-  
-  # 允许手动触发（用于测试）
   workflow_dispatch:
 
 jobs:
-  send-digest:
+  scrape-and-send:
     runs-on: ubuntu-latest
     
     steps:
-      - name: Send Daily Report
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Chrome
         run: |
-          curl -X POST \
-            -H "Content-Type: application/json" \
-            "${{ secrets.VERCEL_URL }}/api/send-report" \
-            || echo "API 调用失败"
-        
-        # 注意：部署后需要将 VERCEL_URL 替换为你的实际网站地址
-        # 在 GitHub 仓库的 Settings → Secrets and variables → Actions 中添加：
-        # - VERCEL_URL: https://你的域名.vercel.app
+          sudo apt-get update
+          sudo apt-get install -y chromium-browser
+
+      - name: Install dependencies
+        run: npm install puppeteer-core
+
+      - name: Scrape policies and send email
+        run: node scripts/scrape-and-send.js
+        env:
+          VERCEL_URL: ${{ secrets.VERCEL_URL }}
+          PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium-browser
+          MOFCOM_URL: ${{ vars.MOFCOM_URL || 'https://www.mofcom.gov.cn/zwgk/zcfb/index.html' }}
